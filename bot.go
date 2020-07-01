@@ -34,9 +34,9 @@ type Bot struct {
 	channelIDs map[string]*Channel
 	webhookIDs map[string]bool
 
-	// cache of resolved user ID -> name
-	m     sync.Mutex
-	users map[string]string
+	m       sync.Mutex
+	users   map[string]string // cache of user ID -> nickname
+	avatars map[string]string // cache of nickname -> avatar URL
 
 	session       *discordgo.Session
 	removeHandler func()
@@ -115,7 +115,7 @@ func (b *Bot) initialize() error {
 			if _, err := b.session.WebhookExecute(c.webhookID, c.webhookToken, true, &discordgo.WebhookParams{
 				Username:  nick,
 				Content:   text,
-				AvatarURL: findAvatarURL(guild, nick),
+				AvatarURL: b.findAvatar(guild.ID, nick),
 			}); err != nil {
 				return fmt.Errorf("error webhook execute for #%v: %v", c.name, err)
 			}
@@ -164,7 +164,7 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if !ok {
 		return // not enabled for this channel
 	}
-	nick := b.resolveNickname(s, m.GuildID, m.Author)
+	nick := b.resolveNickname(m.GuildID, m.Author)
 	if strings.TrimSpace(nick) == "" || strings.TrimSpace(m.Content) == "" {
 		return // safety
 	}

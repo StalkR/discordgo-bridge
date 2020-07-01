@@ -7,12 +7,10 @@ import (
   "github.com/bwmarrin/discordgo"
 )
 
-const cacheExpiry = time.Minute
-
 // resolveNickname finds the nickname for a given user.
 // User can specify a nickname on each server, different from their username.
-// The result is cached for some time (see cacheExpiry).
-func (b *Bot) resolveNickname(s *discordgo.Session, guildID string, author *discordgo.User) string {
+// The result is cached for 1 minute.
+func (b *Bot) resolveNickname(guildID string, author *discordgo.User) string {
   b.m.Lock()
   nick, ok := b.users[author.ID]
   b.m.Unlock()
@@ -20,7 +18,7 @@ func (b *Bot) resolveNickname(s *discordgo.Session, guildID string, author *disc
     return nick
   }
   nick = author.Username
-  member, err := s.GuildMember(guildID, author.ID)
+  member, err := b.session.GuildMember(guildID, author.ID)
   if err != nil {
     log.Printf("error resolving guild member %v (%v): %v", author.Username, author.ID, err)
     return nick
@@ -32,7 +30,7 @@ func (b *Bot) resolveNickname(s *discordgo.Session, guildID string, author *disc
   b.users[author.ID] = nick
   b.m.Unlock()
   go func(id string) {
-    <-time.After(cacheExpiry)
+    <-time.After(time.Minute)
     b.m.Lock()
     delete(b.users, id)
     b.m.Unlock()
