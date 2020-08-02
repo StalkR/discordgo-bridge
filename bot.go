@@ -20,6 +20,7 @@ package bridge
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -165,8 +166,13 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return // not enabled for this channel
 	}
 	nick := b.resolveNickname(m.GuildID, m.Author)
-	if strings.TrimSpace(nick) == "" || strings.TrimSpace(m.Content) == "" {
+	content, err := m.ContentWithMoreMentionsReplaced(b.session)
+	if err != nil {
+		log.Printf("ContentWithMoreMentionsReplaced error: %v", err)
+		return
+	}
+	if strings.TrimSpace(nick) == "" || strings.TrimSpace(content) == "" {
 		return // safety
 	}
-	c.receive(nick, m.Content)
+	c.receive(nick, content)
 }
