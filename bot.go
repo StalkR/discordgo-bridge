@@ -9,6 +9,7 @@ Setup:
  - get client ID, required to add bot to server below
  - click add bot
  - get token, required to configure the bot
+ - enable server members intent, so it can find avatar and nicknames
  - add bot to server: https://discordapp.com/oauth2/authorize?&client_id=CLIENT_ID&scope=bot&permissions=0
  - for each channel configure a webhook, required to configure the channels (allows impersonation)
 
