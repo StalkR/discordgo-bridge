@@ -15,6 +15,7 @@ import (
   "github.com/fluffle/goirc/state"
 )
 
+// A Bot represents an IRC-Discord bot.
 type Bot struct {
   config       *client.Config
   conn         *client.Conn
@@ -28,6 +29,7 @@ type Bot struct {
   closed bool
 }
 
+// New creates a new IRC-Discord bot.
 func New(options ...Option) (*Bot, error) {
   b := &Bot{
     config: &client.Config{
@@ -115,6 +117,7 @@ func (b *Bot) run() {
   }
 }
 
+// Close disconnects the bot from IRC and Discord.
 func (b *Bot) Close() error {
   b.m.Lock()
   defer b.m.Unlock()
@@ -151,12 +154,15 @@ func toDiscord(d *bridge.Bot, line *client.Line, channels map[string]*bridge.Cha
   c.Send(nick, text)
 }
 
+// An Option configures a Bot in New.
 type Option func(*Bot)
 
+// Host configures the IRC server host:port.
 func Host(v string) Option {
   return func(b *Bot) { b.config.Server = v }
 }
 
+// Nick configures the IRC nick of the bot.
 func Nick(v string) Option {
   return func(b *Bot) {
     b.config.Me.Nick = v
@@ -165,14 +171,19 @@ func Nick(v string) Option {
   }
 }
 
+// TLS configures whether the IRC connection should use TLS. Default is true.
 func TLS(v bool) Option {
   return func(b *Bot) { b.config.SSL = v }
 }
 
+// Token configures the Discord bot token.
 func Token(v string) Option {
   return func(b *Bot) { b.token = v }
 }
 
+// Channel configures IRC channel to Discord channel and webhook.
+// Can be used multiple times.
+// An IRC channel can only have one Discord channel configured.
 func Channel(irc string, discord string, webhook string) Option {
   return func(b *Bot) {
     b.channels[irc] = bridge.NewChannel(discord, webhook, func(nick, text string) {

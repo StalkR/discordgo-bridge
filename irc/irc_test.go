@@ -9,7 +9,8 @@ import (
 
 func ExampleBot() {
   b, err := New(
-    Host("irc.example.com"),
+    Host("irc.example.com:6697"),
+    TLS(true),
     Nick("discord"),
     Token("<discord bot token>"),
     Channel("#irc-channel", "#discord-channel", "<discord webhook URL>"),
