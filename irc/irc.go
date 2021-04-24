@@ -122,14 +122,14 @@ func New(options ...Option) (*Bot, error) {
     b.discord2bridge[k] = channel
     list = append(list, channel)
   }
-  d := bridge.NewBot(b.token, list...)
-  if err := d.Start(); err != nil {
+  b.discord = bridge.NewBot(b.token, list...)
+  if err := b.discord.Start(); err != nil {
     return nil, err
   }
 
   b.conn.HandleFunc("privmsg",
     func(conn *client.Conn, line *client.Line) {
-      toDiscord(b, d, line)
+      toDiscord(b, line)
     })
 
   go b.run()
@@ -176,7 +176,7 @@ func toIRC(b *Bot, discord, nick, text string) {
   }
 }
 
-func toDiscord(b *Bot, d *bridge.Bot, line *client.Line) {
+func toDiscord(b *Bot, line *client.Line) {
   channel := line.Args[0]
   nick := line.Nick
   text := line.Args[1]
