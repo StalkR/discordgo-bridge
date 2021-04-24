@@ -24,9 +24,10 @@ type Bot struct {
   token   string // discord API token
   discord *bridge.Bot
 
-  discord2irc    map[string][]*ircChannel
-  irc2discord    map[string][]*discordChannel
-  discord2bridge map[string]*bridge.Channel
+  discord2irc     map[string][]*ircChannel
+  irc2discord     map[string][]*discordChannel
+  discord2webhook map[string]string
+  discord2bridge  map[string]*bridge.Channel
 
   m      sync.Mutex
   closed bool
@@ -49,9 +50,10 @@ func New(options ...Option) (*Bot, error) {
       Proxy:       "",
       Pass:        "",
     },
-    discord2irc:    map[string][]*ircChannel{},     // relay Discord channels to IRC channels
-    irc2discord:    map[string][]*discordChannel{}, // relay IRC channels to Discord channels
-    discord2bridge: map[string]*bridge.Channel{},   // unique handles for each Discord channel
+    discord2irc:     map[string][]*ircChannel{},     // relay Discord channels to IRC channels
+    irc2discord:     map[string][]*discordChannel{}, // relay IRC channels to Discord channels
+    discord2webhook: map[string]string{},            // webhooks
+    discord2bridge:  map[string]*bridge.Channel{},   // unique handles for each Discord channel
   }
 
   for _, option := range options {
@@ -105,17 +107,8 @@ func New(options ...Option) (*Bot, error) {
       log.Println(conn.Config().Server, line.Cmd, line.Text())
     })
 
-  discords := map[string]string{}
-  for k := range b.discord2irc {
-    discords[k] = ""
-  }
-  for _, s := range b.irc2discord {
-    for _, v := range s {
-      discords[v.channel] = v.webhook
-    }
-  }
   var list []*bridge.Channel
-  for k, webhook := range discords {
+  for k, webhook := range b.discord2webhook {
     channel := bridge.NewChannel(k, webhook, func(nick, text string) {
       toIRC(b, k, nick, text)
     })
@@ -234,6 +227,7 @@ func Relay(from, to interface{}) Option {
         return fmt.Errorf("%v is not a discord channel", to)
       }
       b.irc2discord[irc.channel] = append(b.irc2discord[irc.channel], discord)
+      b.discord2webhook[discord.channel] = discord.webhook
       return nil
 
     case *discordChannel:
@@ -243,6 +237,7 @@ func Relay(from, to interface{}) Option {
         return fmt.Errorf("%v is not an IRC channel", to)
       }
       b.discord2irc[discord.channel] = append(b.discord2irc[discord.channel], irc)
+      b.discord2webhook[discord.channel] = discord.webhook
       return nil
     }
     return fmt.Errorf("%v is neither a Discord or IRC channel", from)
