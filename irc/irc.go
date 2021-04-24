@@ -21,9 +21,12 @@ type Bot struct {
   conn         *client.Conn
   disconnected chan struct{}
 
-  token    string                     // discord API token
-  channels map[string]*bridge.Channel // irc -> discord channels
-  discord  *bridge.Bot
+  token   string // discord API token
+  discord *bridge.Bot
+
+  discord2irc    map[string][]*ircChannel
+  irc2discord    map[string][]*discordChannel
+  discord2bridge map[string]*bridge.Channel
 
   m      sync.Mutex
   closed bool
@@ -46,11 +49,15 @@ func New(options ...Option) (*Bot, error) {
       Proxy:       "",
       Pass:        "",
     },
-    channels: map[string]*bridge.Channel{},
+    discord2irc:    map[string][]*ircChannel{},     // relay Discord channels to IRC channels
+    irc2discord:    map[string][]*discordChannel{}, // relay IRC channels to Discord channels
+    discord2bridge: map[string]*bridge.Channel{},   // unique handles for each Discord channel
   }
 
   for _, option := range options {
-    option(b)
+    if err := option(b); err != nil {
+      return nil, err
+    }
   }
 
   if b.config.Server == "" {
@@ -71,10 +78,19 @@ func New(options ...Option) (*Bot, error) {
 
   b.conn.EnableStateTracking()
 
+  channels := map[string]struct{}{}
+  for k := range b.irc2discord {
+    channels[k] = struct{}{}
+  }
+  for _, s := range b.discord2irc {
+    for _, v := range s {
+      channels[v.channel] = struct{}{}
+    }
+  }
   b.conn.HandleFunc("connected",
     func(conn *client.Conn, line *client.Line) {
       conn.Mode(conn.Me().Nick, "+B")
-      for channel := range b.channels {
+      for channel := range channels {
         conn.Join(channel)
       }
     })
@@ -89,9 +105,22 @@ func New(options ...Option) (*Bot, error) {
       log.Println(conn.Config().Server, line.Cmd, line.Text())
     })
 
+  discords := map[string]string{}
+  for k := range b.discord2irc {
+    discords[k] = ""
+  }
+  for _, s := range b.irc2discord {
+    for _, v := range s {
+      discords[v.channel] = v.webhook
+    }
+  }
   var list []*bridge.Channel
-  for _, v := range b.channels {
-    list = append(list, v)
+  for k, webhook := range discords {
+    channel := bridge.NewChannel(k, webhook, func(nick, text string) {
+      toIRC(b, k, nick, text)
+    })
+    b.discord2bridge[k] = channel
+    list = append(list, channel)
   }
   d := bridge.NewBot(b.token, list...)
   if err := d.Start(); err != nil {
@@ -99,7 +128,9 @@ func New(options ...Option) (*Bot, error) {
   }
 
   b.conn.HandleFunc("privmsg",
-    func(conn *client.Conn, line *client.Line) { toDiscord(d, line, b.channels) })
+    func(conn *client.Conn, line *client.Line) {
+      toDiscord(b, d, line)
+    })
 
   go b.run()
 
@@ -134,60 +165,115 @@ func (b *Bot) isClosed() bool {
 
 const commandPrefix = "!"
 
-func toIRC(b *Bot, channel, nick, text string) {
-  if strings.HasPrefix(text, commandPrefix) {
-    b.conn.Privmsg(channel, fmt.Sprintf("Command sent from discord by %v", nick))
-    b.conn.Privmsg(channel, text)
-    return
+func toIRC(b *Bot, discord, nick, text string) {
+  for _, v := range b.discord2irc[discord] {
+    if strings.HasPrefix(text, commandPrefix) {
+      b.conn.Privmsg(v.channel, fmt.Sprintf("Command sent from discord by %v", nick))
+      b.conn.Privmsg(v.channel, text)
+      continue
+    }
+    b.conn.Privmsg(v.channel, fmt.Sprintf("<%v> %v", nick, text))
   }
-  b.conn.Privmsg(channel, fmt.Sprintf("<%v> %v", nick, text))
 }
 
-func toDiscord(d *bridge.Bot, line *client.Line, channels map[string]*bridge.Channel) {
+func toDiscord(b *Bot, d *bridge.Bot, line *client.Line) {
   channel := line.Args[0]
   nick := line.Nick
   text := line.Args[1]
-  c, ok := channels[channel]
-  if !ok {
-    return
+  for _, v := range b.irc2discord[channel] {
+    b.discord2bridge[v.channel].Send(nick, text)
   }
-  c.Send(nick, text)
 }
 
 // An Option configures a Bot in New.
-type Option func(*Bot)
+type Option func(*Bot) error
 
 // Host configures the IRC server host:port.
 func Host(v string) Option {
-  return func(b *Bot) { b.config.Server = v }
+  return func(b *Bot) error {
+    b.config.Server = v
+    return nil
+  }
 }
 
 // Nick configures the IRC nick of the bot.
 func Nick(v string) Option {
-  return func(b *Bot) {
+  return func(b *Bot) error {
     b.config.Me.Nick = v
     b.config.Me.Ident = v
     b.config.Me.Name = v
+    return nil
   }
 }
 
 // TLS configures whether the IRC connection should use TLS. Default is true.
 func TLS(v bool) Option {
-  return func(b *Bot) { b.config.SSL = v }
+  return func(b *Bot) error {
+    b.config.SSL = v
+    return nil
+  }
 }
 
 // Token configures the Discord bot token.
 func Token(v string) Option {
-  return func(b *Bot) { b.token = v }
+  return func(b *Bot) error {
+    b.token = v
+    return nil
+  }
 }
 
-// Channel configures IRC channel to Discord channel and webhook.
-// Can be used multiple times.
-// An IRC channel can only have one Discord channel configured.
-func Channel(irc string, discord string, webhook string) Option {
-  return func(b *Bot) {
-    b.channels[irc] = bridge.NewChannel(discord, webhook, func(nick, text string) {
-      toIRC(b, irc, nick, text)
-    })
+// Relay configures a relay from either IRC channel or Discord channel to the other.
+// To have it both ways, use twice or use the Sync shortcut.
+func Relay(from, to interface{}) Option {
+  return func(b *Bot) error {
+    switch v := from.(type) {
+    case *ircChannel:
+      irc := v
+      discord, ok := to.(*discordChannel)
+      if !ok {
+        return fmt.Errorf("%v is not a discord channel", to)
+      }
+      b.irc2discord[irc.channel] = append(b.irc2discord[irc.channel], discord)
+      return nil
+
+    case *discordChannel:
+      discord := v
+      irc, ok := to.(*ircChannel)
+      if !ok {
+        return fmt.Errorf("%v is not an IRC channel", to)
+      }
+      b.discord2irc[discord.channel] = append(b.discord2irc[discord.channel], irc)
+      return nil
+    }
+    return fmt.Errorf("%v is neither a Discord or IRC channel", from)
   }
+}
+
+// Sync an IRC channel with a Discord channel.
+func Sync(irc *ircChannel, discord *discordChannel) Option {
+  return func(b *Bot) error {
+    if err := Relay(irc, discord)(b); err != nil {
+      return err
+    }
+    return Relay(discord, irc)(b)
+  }
+}
+
+type ircChannel struct {
+  channel string
+}
+
+// Channel configures an IRC channel.
+func Channel(channel string) *ircChannel {
+  return &ircChannel{channel: channel}
+}
+
+type discordChannel struct {
+  channel string
+  webhook string
+}
+
+// Discord configures a Discord channel with a webhook.
+func Discord(channel string, webhook string) *discordChannel {
+  return &discordChannel{channel: channel, webhook: webhook}
 }

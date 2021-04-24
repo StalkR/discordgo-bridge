@@ -13,8 +13,9 @@ func ExampleBot() {
     TLS(true),
     Nick("discord"),
     Token("<discord bot token>"),
-    Channel("#irc-channel", "#discord-channel", "<discord webhook URL>"),
-    // Channel("#another-irc-channel", "#another-discord-channel", "<discord webhook URL>"),
+    Sync(Channel("#irc-channel"), Discord("#discord-channel", "<discord webhook URL>")),
+    Relay(Discord("#discord-channel", "<discord webhook URL>"), Channel("#irc-read-only-channel")),
+    Relay(Channel("#irc-channel"), Discord("#discord-read-only-channel", "<discord webhook URL>")),
     // ...
   )
   if err != nil {
