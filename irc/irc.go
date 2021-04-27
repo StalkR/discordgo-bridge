@@ -163,6 +163,7 @@ func (b *Bot) isClosed() bool {
 const commandPrefix = "!"
 
 func toIRC(b *Bot, discord, nick, text string) {
+	text = strings.ReplaceAll(text, "\n", "; ")
 	for _, v := range b.discord2irc[discord] {
 		if strings.HasPrefix(text, commandPrefix) {
 			b.conn.Privmsg(v.channel, fmt.Sprintf("Command sent from discord by %v", nick))
