@@ -24,8 +24,8 @@ type Bot struct {
 	token   string // discord API token
 	discord *bridge.Bot
 
-	discord2irc     map[string][]*ircChannel
-	irc2discord     map[string][]*discordChannel
+	discord2irc     map[string][]*ChannelIRC
+	irc2discord     map[string][]*ChannelDiscord
 	discord2webhook map[string]string
 	discord2bridge  map[string]*bridge.Channel
 
@@ -50,8 +50,8 @@ func New(options ...Option) (*Bot, error) {
 			Proxy:       "",
 			Pass:        "",
 		},
-		discord2irc:     map[string][]*ircChannel{},     // relay Discord channels to IRC channels
-		irc2discord:     map[string][]*discordChannel{}, // relay IRC channels to Discord channels
+		discord2irc:     map[string][]*ChannelIRC{},     // relay Discord channels to IRC channels
+		irc2discord:     map[string][]*ChannelDiscord{}, // relay IRC channels to Discord channels
 		discord2webhook: map[string]string{},            // webhooks
 		discord2bridge:  map[string]*bridge.Channel{},   // unique handles for each Discord channel
 	}
@@ -228,9 +228,9 @@ func Token(v string) Option {
 func Relay(from, to interface{}) Option {
 	return func(b *Bot) error {
 		switch v := from.(type) {
-		case *ircChannel:
+		case *ChannelIRC:
 			irc := v
-			discord, ok := to.(*discordChannel)
+			discord, ok := to.(*ChannelDiscord)
 			if !ok {
 				return fmt.Errorf("%v is not a discord channel", to)
 			}
@@ -238,9 +238,9 @@ func Relay(from, to interface{}) Option {
 			b.discord2webhook[discord.channel] = discord.webhook
 			return nil
 
-		case *discordChannel:
+		case *ChannelDiscord:
 			discord := v
-			irc, ok := to.(*ircChannel)
+			irc, ok := to.(*ChannelIRC)
 			if !ok {
 				return fmt.Errorf("%v is not an IRC channel", to)
 			}
@@ -253,7 +253,7 @@ func Relay(from, to interface{}) Option {
 }
 
 // Sync an IRC channel with a Discord channel.
-func Sync(irc *ircChannel, discord *discordChannel) Option {
+func Sync(irc *ChannelIRC, discord *ChannelDiscord) Option {
 	return func(b *Bot) error {
 		if err := Relay(irc, discord)(b); err != nil {
 			return err
@@ -262,21 +262,23 @@ func Sync(irc *ircChannel, discord *discordChannel) Option {
 	}
 }
 
-type ircChannel struct {
+// ChannelIRC represents a configured IRC channel with Channel().
+type ChannelIRC struct {
 	channel string
 }
 
 // Channel configures an IRC channel.
-func Channel(channel string) *ircChannel {
-	return &ircChannel{channel: channel}
+func Channel(channel string) *ChannelIRC {
+	return &ChannelIRC{channel: channel}
 }
 
-type discordChannel struct {
+// ChannelDiscord represents a configured Discord channel with Discord().
+type ChannelDiscord struct {
 	channel string
 	webhook string
 }
 
 // Discord configures a Discord channel with a webhook.
-func Discord(channel string, webhook string) *discordChannel {
-	return &discordChannel{channel: channel, webhook: webhook}
+func Discord(channel string, webhook string) *ChannelDiscord {
+	return &ChannelDiscord{channel: channel, webhook: webhook}
 }
