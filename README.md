@@ -45,8 +45,8 @@ Discord Go bindings: [bwmarrin/discordgo][5] ([doc][6]).
 ## Bugs, comments, questions
 Create a [new issue][7].
 
-[1]: https://api.travis-ci.org/StalkR/discordgo-bridge.png?branch=master
-[2]: https://travis-ci.org/StalkR/discordgo-bridge
+[1]: https://github.com/StalkR/discordgo-bridge/actions/workflows/build.yml/badge.svg
+[2]: https://github.com/StalkR/discordgo-bridge/actions/workflows/build.yml
 [3]: https://godoc.org/github.com/StalkR/discordgo-bridge?status.png
 [4]: https://godoc.org/github.com/StalkR/discordgo-bridge
 [5]: https://github.com/bwmarrin/discordgo
