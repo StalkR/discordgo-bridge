@@ -109,6 +109,7 @@ func New(options ...Option) (*Bot, error) {
 
 	var list []*bridge.Channel
 	for k, webhook := range b.discord2webhook {
+		k := k
 		channel := bridge.NewChannel(k, webhook, func(nick, text string) {
 			toIRC(b, k, nick, text)
 		})
